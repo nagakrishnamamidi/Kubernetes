@@ -1,0 +1,613 @@
+---
+
+Kitchen Stove / Cooking equipments --> Container Runtime : Docker Engine / CRI-O / ContainerD
+
+Container Image / Docker Image : Entire app containerise and made as an Image..
+
+Container Orchestration : Kitchen Manager : Amazon ECS, K8s, EKS, Docker Swarm, Apache Mesos..
+
+Container Registry : Cookbook : Docker Hub, ECR, Azure Container Registry..
+
+--
+
+Kubernetes / K8s : 
+
+Control plane (Brain of K8s): 
+
+API-Server / Kube-apiserver : Entry / Front door of Kubernetes.. All API requests from users and tools handles by this api-server.
+
+Controller Manager /kube-controller-manager : Ensure the desired state of the cluster (Maintains replicas, Replaces failed pods, Node health management)
+
+Scheduler (kube-scheduler) : Decides where to run the new pod, Based on resource availability.. 
+
+etcd (key-value store) : It stores all cluster data (Configurations, deployments, state).. 
+
+CCM / Cloud Controller Manager : Integrates K8s with cloud providers (AWS, Azure, GCP).. ELB, Storage, Networks.. 
+
+
+Worker Nodes (Hands of K8s) : EC2 / Fargate / Our own Server.. 
+
+Kubelet : Runs on every worker node we have.. enables/responsible to establish communication with API server.. Ensures the node runs the assigned container.. 
+
+Container Runtime : Runs containers on the Nodes. 
+
+Kube-Proxy : Manages the networking and ensures pods can communicate each other (pod to pod / node to node)..
+
+Pods : The smallest unit in K8s.. A pod contains one or more containers.. 
+
+====
+
+K8s = Container = pod = ECS Task
+
+Pod contains Container.. 
+
+---
+
+Container : Lightweight, standalone and executable unit of software that contains everything needs to run our applicaiton.
+Code, runtime, system libraries, dependencies... 
+
+POD : A pod is smallest and simplest deployable unit in K8s. It can contains one or more containers.
+
+Node : Node is nothing but an ec2 instance or a server, where K8s workload runs.. 
+
+
+
+---
+
+Pod :
+
+Replica Set : 
+
+Deployment : 
+
+Service : 
+
+
+
+---
+
+Control Plane :
+api-server : Frontend for K8s..
+etcd : Contains or stores cluster metadata in Key and value.. 
+kube-controller-manager : Maintans desired cluster state..
+kube-scheduler : Desides where pod needs to run..
+
+Worker Node : 
+kubelet : communicates with api-server, ensure pods properly running on the nodes.
+container runtime : runs the containers.. docker, cri-o, containerd
+kube proxy : Manages the communication (Internal or external)
+pod : Smallest deployable unit in K8s.. It contains one or more containers.. 
+
+Sidecar container : helper contianers for main containers.. 
+
+
+---
+
+Pod : Contains our application container..
+
+ReplicaSet : Ensures specified number of identitical pod replicas are running always. 
+
+--> Pod Available
+--> Self healing
+--> Manual Scaling
+
+** Does not support rolling updates. We need to use Deployment..
+
+Deployment : Deployment maintains the ReplicaSets and it allow "Rolling Updates".
+
+--
+
+Service : Service is an abstractio that defines a logical set of podss. 
+Sometimes Pods lifetime is very short.. Depending on pods IP to communicate may lead to communication failure.. So, We can logically group all the pods, that serves same purpose/content, then we can use the service name..
+
+
+--> ClusterIP : 
+--> NodePort : 
+--> LoadBalancer : Classic Load Balancer
+
+
+---
+
+1. Managed Control plane : AWS manages the Control plane components (API Server, etcd, Scheduler, CM..), AWS takes care about HA/FT.
+
+--> Easily integrate with other AWS services.. VPC, IAM, Cloudwatch, LoadBalancer, s3... 
+
+--> AWS takes care about complete "Control Plane"
+
+--> AWS EKS Data Plane has 4 Options.
+
+--> EC2 - Self managed node group : "WE" will have full control.. (Scaling, os patching..)
+	--> We need to use Custom AMIs while launching these instances.
+	
+--> EC2 - Managed Node group : "AWS" provisions and manages the nodes/instances.
+	--> AWS takes care about the updatees, sclaing, patching..
+	--> AWS uses "bottlerocket" as default ami
+	--> All we need to do is "choose right sized instance".
+	
+--> Fargate (Serverless)
+	--> No nodes to manage, No node group concept.
+	--> Directly we can run pods.
+
+--> AWS EKS Auto Mode
+	--> AWS takes care about the updatees, sclaing, patching..
+	--> We get high configuration instances at very low cost.
+
+---
+
+
+You should have 2 components.. 
+
+1. AWS CLI Installed and configured
+2. eksctl
+3. kubectl
+	
+
+eksctl create cluster --name=ekswithavinash --version 1.33 --region ap-south-1 --nodegroup-name ng-default --node-type t3.small --nodes 3 --managed --node-ami-family=AmazonLinux2023
+
+
+---
+
+OIDC : IAM OpenID Connect, This allows AWS IAM to authenticate with K8s service accounts and IAM Permissions and roles.
+
+aws eks describe-cluster --name ekswithavinash --query "cluster.identity.oidc.issuer"
+
+If above command retuned empty, We need to create an OIDC provider.
+
+
+'''
+eksctl utils associate-iam-oidc-provider --region ap-south-1 --cluster ekswithavinash --approve
+'''
+
+
+eksctl get cluster			--> List the eks clusters
+
+
+kubectl 
+ 			
+
+
+eksctl delete cluster --name ekswithavinash
+
+---
+
+kubectl get all 		--> All K8s components present in default namespace
+
+kubectl get all -A		--> List everything, including K8s default namespaces (K8s system pods)
+
+kubectl get pods
+kubectl get replicasets		kubectl get rs
+kubectl get services		kubectl get svc
+kubectl get namespaces		kubectl get ns
+
+
+kubectl apply -f pod.yaml --dry-run=client
+kubectl apply -f pod.yaml
+kubectl get pods
+
+
+kubectl describe pods awar04-pod
+
+kubectl delete pod rs-call-app-s4kqt
+kubectl delete pod/rs-call-app-s4kqt
+
+
+--------
+
+K8s Deployment Strategies :
+
+
+Rolling Update : This method gradually replaces old pods with new pods. As we have addl pods also to deliver our applicatiom, we dont see any downtimes.
+Most of the day-to-day deployments prefer this.
+
+MaxSurge : Extra Pods allowed during the update
+MaxUnavailable : How many can be down
+
+---
+
+Recreate : All existing pods will be terminated, then new pods starts running. We will get a very short downtime. Service delivering pods count goes to 0, then it will start sending traffic to new pods.
+
+---
+
+Blue/Green Deployment : Blue (Current Environment) and green (new Env). 
+
+---
+
+Canary Release : Send a small percentage of real traffic to the newer version.. (1-5%).. If everything is good, Then increase the % to 25%, 50%, 100%.
+--> Old and New environments works side-by-side. 
+
+---
+
+A/B Deployment : Route some of the users to one version of application.. another set of users to another set of application.. New UI experiments.. 
+
+---
+
+Shadow Deployment : We can duplicate the traffic without any user impact. 
+
+---
+
+
+NameSpace / ns : Logical isolation for the resources. 
+
+
+Multiple teams planning to use same cluster..?? 
+
+Dev-Namesapce : Dev worklods
+uat-namespace : UAT Workloads
+
+Multi Tenancy : Differenciate workload based on Teams/Environments. app to app seperation..
+Isolated Environment..
+Resource Quotas : We can limit a namespace to have specific CPU and Memory limit.
+RBAC (Role Based Access Control) : used to restrict access to users. (user1 --> Dev-ns, )
+
+
+Default Namespaces in K8s:
+
+Default : Default ns for all resources when no ns is specified. 
+Kube-System : K8s system components.. (CoreDNS, kube-proxy, Moniroting..).. **Do not delete these resources..
+Kube-Public : Publicly readable namespace, generally used for cluster-wide information..
+Kube-node-lease : Manages node heartbeat to track node availability.
+aws-observability : Stores AWS observability components.. Avaibale only with EKS.
+
+---
+
+Pod : Smallest deployable unit..  It contains one or more contianers..
+ReplicaSet : Identical pods with Desired count.. 
+Deployment : pod + rs .. Supports Rolling updates.. 
+
+Service : Gives single point of contact to pods.. To expose pods to outside world, we need service..
+	--> ClusterIP : Internal / Within the cluster
+	--> NodePort : We can deliver to outside world, uses a preconfigured port range (30000 - 32767)
+	--> LoadBalancer : Cloud load balancer.. AWS: Classic Load Balancer.. 
+	--> Headless : 
+
+Node : Is a machine where our qactual workload runs.. i.e; ec2 instance, own server..
+
+Namespace : logical isolation os resources.. Set limits based on the NS.. 
+
+---
+
+DaemonSet : it will ensure a pod is runing on everynode we have in K8s cluster. 
+	--> Log Collector (dynatrace / fluentbit)
+	--> monitoring agents (Dyantrace / Prometheous nde exporter)
+	--> Network plugins (calico) Falco
+
+kubectl label node <node-name> dedicated=monitoring
+
+---
+
+StatefulSet : 
+--> A persistent Identity (web-01, web-02)
+--> Stable storage with EBS
+--> Created and terminated in Order wise.
+
+We need to enable EBS CSI Driver:
+
+1. Approve IAM OIDC Provider..
+
+cluster_name=ekswithavinash
+eksctl utils associate-iam-oidc-provider --cluster $cluster_name --approve
+
+2. IRSA (IAM Role for Service Acocunt)
+
+2.1 Create IAM Role for EBS CSI Driver..
+
+eksctl create iamserviceaccount --name ebs-csi-controller-sa --namespace kube-system --cluster ekswithavinash --attach-policy-arn arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy --approve --role-only --role-name AmazonEKS_EBS_CSI_DriverRole
+
+2.2
+export SERVICE_ACCOUNT_ROLE_ARN=arn:aws:iam::828477980115:role/AmazonEKS_EBS_CSI_DriverRole
+
+2.3
+eksctl create addon --name aws-ebs-csi-driver --cluster ekswithavinash --service-account-role-arn arn:aws:iam::828477980115:role/AmazonEKS_EBS_CSI_DriverRole --force
+
+Headless Service : Its a spl kind of service without a ClusterIP. It doesnt load traffic, it directly exposes the pods behind it.
+
+names : web-0.nginx.default.svc.cluster.local
+
+---
+
+ConfigMaps : To store non-sensitive informaiton.. 
+
+Systems manager parameter store = K8s ConfigMaps = To store non-sensitive data
+Secrets Manager = K8s Secrets = To store sensitive data
+
+kubectl create configmap my-config-info --from-literal=GREETING="Hello from Avinash"
+
+---
+
+How exactly we have apt for ubuntu, dnf/yum for al2023/rhel.. K8s has helm charts.. 
+
+Helm chart : A collection of yaml files for K8s (Deployment, service, configmap...)
+Helm repository : A place to store helm charts.. 
+
+values file --> values.yml --> We can store all the configurable parameters.. 
+
+
+helm repo list			--> TO list the Installed repos
+helm repo update		--> To update the installed repos with latest charts.
+
+helm search repo <chart-name> 
+
+helm delete <name>		--> uninstall/delete the helm repo and app.
+
+helm uninstall <name>
+
+helm status my-node-app
+
+helm history my-node-app
+
+helm rollback my-node-app <2>
+
+helm package <chart-directory>
+
+---
+
+HPA : Horizontal Pod Autoscaler : 
+
+Cluster Autoscaler : It also comes under horizontal scaling only..  
+
+
+kubectl apply -f php-apache.yml
+
+kubectl autoscale deployment php-apache --cpu-percent=50 --min=1 --max=6
+
+
+kubectl run -i --tty load-generator --rm --image=busybox:1.28 --restart=Never -- /bin/sh -c "while sleep 0.01; do wget -q -O- http://php-apache; done"
+
+kubectl get hpa
+kubectl describe hpa
+
+kubectl get pods -w (watch mode)
+
+kubectl delete hpa php-apache
+kubectl delete deployment php-apache
+kubectl delete service php-apache
+
+----
+
+helm repo add autoscaler https://kubernetes.github.io/autoscaler
+helm repo update
+
+helm install cluster-autoscaler autoscaler/cluster-autoscaler \
+  --namespace kube-system \
+  --set autoDiscovery.clusterName=ekswithavinash \
+  --set awsRegion=ap-south-1 \
+  --set extraArgs.balance-similar-node-groups=true \
+  --set extraArgs.skip-nodes-with-system-pods=false
+
+
+kubectl apply -f php-apache.yml
+
+kubectl scale deployment php-apache --replicas=50
+
+kubectl get pods -w
+
+---
+
+
+--> ClusterIP : 
+--> NodePort : 
+--> LoadBalancer : Classic Load Balancer : AWS Stopped support
+
+
+Ingress Controller : 
+
+Path Based Routing : domainname.com/notifications, domainname.com/taskservice
+IP/Host Based Based : IP
+Load Balancer : Distribute the incoming traffic across pods.
+With classic LB, We need to create a LB for every service.. With Ingress/ALB, No need to create multiple LBs.
+
+
+---
+
+Fargate : 
+
+eksctl create cluster --name ekswithavinash --region ap-south-1 --version 1.33 --fargate
+
+eksctl utils associate-iam-oidc-provider --region ap-south-1 --cluster ekswithavinash --approve
+
+kubectl create ns nginx
+
+eksctl create fargateprofile --cluster ekswithavinash --name nginx-fg --namespace nginx
+
+---
+
+EKS Auto : 
+
+
+---
+
+K8s has deafult CLuster AutoScaler.. 
+--> Karpenter performs Pod Driven Scaling
+--> Direct Instance Provisioning
+
+---
+
+Deployment strategies:
+
+Recreate : Old ones will delete & new ones will create..
+	--> Downtime required
+	--> Simple and clean
+	
+Rolling Update : Its default starategy for our worklods.. 
+	--> Widely used one, as this doesnt required downtime.
+	--> Gradually replaces old pods with new pods.
+	
+Blue & Green Deployment: 
+	--> Bit consytly compared to other deployments
+	--> We need to maintain 2 verison of our applicaiton
+	--> Safer deployment approach
+	
+Canary Deployment : 
+	--> gradually sends the traffic to new verison (10%, 30%...)
+	--> test new verison with real users before full rollout.
+
+
+export SERVICE_ACCOUNT_ROLE_ARN=arn:aws:iam::828477980115:role/AmazonEKS_EBS_CSI_DriverRole
+
+
+---
+
+Small tool to help, K8s pricing/cost analysis.
+
+https://github.com/kubecost/kubecost
+
+---
+
+
+Install KOPS / kOps
+
+1. Install and configure "AWS CLI", "kubectl"
+2. Create an s3 bucket for KOPS State store, Export as env varibale.
+
+export KOPS_STATE_STORE=s3://aviz-k8-state
+
+verify the cluster status.. "kops get clusters"
+
+3. Create the cluster
+
+kops create cluster --name=demo.learnaws.today --state=$KOPS_STATE_STORE --zones=ap-south-1a,ap-south-1b --node-count=2 --node-size=t3.medium --control-plane-size=t3.medium --dns-zone=learnaws.today
+
+
+ * list clusters with: kops get cluster
+ * edit this cluster with: kops edit cluster demo.learnaws.today
+ * edit your node instance group: kops edit ig --name=demo.learnaws.today nodes-ap-south-1a
+ * edit your control-plane instance group: kops edit ig --name=demo.learnaws.today control-plane-ap-south-1a
+ 
+ 
+kops export kubecfg --name=demo.learnaws.today --admin
+
+kubectl config use-context demo.learnaws.today
+
+kops validate cluster --state=$KOPS_STATE_STORE --name=demo.learnaws.today
+
+kubectl cluster-info
+
+=====
+
+Create and access Dashboard
+
+====
+
+. Install the Dashboard
+Apply the recommended manifests:
+
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.7.0/aio/deploy/recommended.yaml
+
+This creates the Dashboard deployment in the kubernetes-dashboard namespace.
+
+2. Create an Admin User
+
+To log in, you need a ServiceAccount with cluster-admin rights.
+
+
+kubectl create serviceaccount admin-user -n kubernetes-dashboard
+
+kubectl create clusterrolebinding admin-user \
+  --clusterrole=cluster-admin \
+  --serviceaccount=kubernetes-dashboard:admin-user
+  
+3. Get the Login Token. Generate a token for the admin-user ServiceAccount:
+
+kubectl -n kubernetes-dashboard create token admin-user
+
+You’ll see a long JWT string — copy this, it will be used to log in.
+
+4. Access the Dashboard
+
+Secure Local Proxy (Recommended)
+
+kubectl proxy
+
+Now open this URL in your browser:
+
+👉 http://localhost:8001/api/v1/namespaces/kubernetes-dashboard/services/https:kubernetes-dashboard:/proxy/
+
+Paste the token from step 3 when prompted.
+
+
+---
+
+
+kubectl label nodes ip-192-168-56-240.ap-south-1.compute.internal disktype=ssd
+
+eksctl utils associate-iam-oidc-provider --region ap-south-1 --cluster ekswithavinash --approve
+
+
+--
+
+kubectl taint nodes ip-192-168-56-240.ap-south-1.compute.internal role=db:NoSchedule
+
+---
+
+Liveness Probe: “Are you alive? If not, restart.”
+Readiness Probe: “Are you ready to serve customers? If not, don’t send traffic.”
+Startup Probe: “Need extra wake-up time? I’ll wait.”
+
+
+
+kubectl drain ip-192-168-56-240.ap-south-1.compute.internal --ignore-daemonsets
+
+
+kubectl delete pods web-app-7d685947cd-78t7k web-app-7d685947cd-8fmfh web-app-7d685947cd-m5rpc web-app-7d685947cd-xft79
+
+---
+
+eksctl utils associate-iam-oidc-provider --region ap-south-1 --cluster ekswithavinash --approve
+
+---
+
+
+
+kubectl create namespace argocd
+
+kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+
+kubectl patch svc argocd-server -n argocd -p '{"spec": {"type": "LoadBalancer"}}'
+
+kubectl -n argocd get secret argocd-initial-admin-secret \
+          -o jsonpath="{.data.password}" | base64 -d; echo
+		  
+---
+
+Prometheus : Opensource monitoring and alerting system.. 
+--> Periodically collects the metrics and exposes the metrics to the UI services.
+
+--> Time Series DB
+--> metrics
+--> PromQL : Query language
+--> We can configure "Alert Manager" to send alerts whenever any event occured.
+
+
+Grafana : Open-source visualisation and dashboarding tool.. 
+--> it dont have capabilities to collect the data.. But it can fetch the data from a data source i.e; Prometheus, cloudwatch, ElasticSearch, mysql, Loki.. and can provide the visualisartion..
+
+
+Prometheus = collect the metrics..
+grafana = gives visualisation/dashboard to the metrics..
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
